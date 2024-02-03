@@ -72,10 +72,12 @@ def get_embedding(text):
     return embeddings_numpy
 
 def calc_similarity(embedding1, embedding2):
-    """
-    Calculates cosine similarity between two embeddings.
-    return: The cosine similarity score.
-    """
+    # Flatten the embeddings to 1D if they are 2D of shape (1, N)
+    if embedding1.ndim > 1:
+        embedding1 = embedding1.flatten()
+    if embedding2.ndim > 1:
+        embedding2 = embedding2.flatten()
+
     # Normalize the embeddings to unit vectors
     norm1 = np.linalg.norm(embedding1)
     norm2 = np.linalg.norm(embedding2)
@@ -87,24 +89,24 @@ def calc_similarity(embedding1, embedding2):
     
     return similarity
 
-def generate_suggestions(input_text, standard_phrases, similarity_threshold=0.85):
-    
-    suggestions = []
-     # Generate embeddings for input and standard phrases
-    input_embedding = get_embedding(input_text)
-    # input_tokens = preprocess_text(input_text)
-    # input_phrase_embeddings = {token: get_embedding(token) for token in set(input_tokens)}
+from nltk.tokenize import sent_tokenize
 
-    for phrase in standard_phrases.values():
-        phrase_embedding = get_embedding(phrase)
-        similarity = calc_similarity(input_embedding, phrase_embedding)
-        if similarity > similarity_threshold:
-            suggestions.append((phrase, similarity))
-                
+def generate_suggestions(input_text, standard_phrases, similarity_threshold=0.85):
+    suggestions = []
+    # Segment input_text into sentences
+    input_sentences = sent_tokenize(input_text)
+
+    for original_sentence in input_sentences:
+        input_embedding = get_embedding(original_sentence)
+        for standard_phrase in standard_phrases.values():
+            phrase_embedding = get_embedding(standard_phrase)
+            similarity = calc_similarity(input_embedding, phrase_embedding)
+            if similarity > similarity_threshold:
+                suggestions.append((original_sentence, standard_phrase, similarity))
+    
     # Sort suggestions by similarity score in descending order
     suggestions.sort(key=lambda x: x[2], reverse=True)
     return suggestions
-
 
 @click.command()
 @click.option('--file', '-f', type=click.Path(exists=True), help='Path to a text file to analyze.')
@@ -124,9 +126,19 @@ def main(file):
         input_text = click.prompt("Please enter the text to analyze", type=str)
     
     suggestions = generate_suggestions(input_text, standard_phrases)
-    click.echo(suggestions[0])
-    for original, suggestion, score in suggestions:
-        click.echo(f"Suggested improvement: '{original}' -> '{suggestion}' (Similarity: {score:.2f})")
+    # if suggestions:
+    #     click.echo(f"Top suggestion: {suggestions[0][0]} (Similarity: {suggestions[0][1]:.2f})")
+    #     for suggestion, score in suggestions:
+    #         click.echo(f"Suggested improvement: '{suggestion}' (Similarity: {score:.2f})")
+    # else:
+    #     click.echo("No suggestions found above the similarity threshold.")
+    if suggestions:
+        # If you have suggestions, print them out
+        for original_phrase, suggestion, score in suggestions:
+            click.echo(f"Original: '{original_phrase}' -> Suggested: '{suggestion}' (Similarity: {score:.2f})")
+    else:
+        # If there are no suggestions, indicate that no suggestions were found
+        click.echo("No suggestions found above the similarity threshold.")
 
 
 # Example usage
