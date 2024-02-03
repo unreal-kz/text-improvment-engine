@@ -3,10 +3,19 @@ import csv
 import nltk
 import spacy
 import numpy as np
+import torch
 
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.metrics.pairwise import cosine_similarity
+from transformers import GPT2Model, GPT2Tokenizer
+
+# Load pre-trained model and tokenizer
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+model = GPT2Model.from_pretrained('gpt2')
+# Set pad_token
+if tokenizer.pad_token is None:
+    tokenizer.pad_token = tokenizer.eos_token  # GPT-2 uses eos_token as pad_token
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -47,38 +56,50 @@ def load_std_phrases(file_path):
     
     return phrases
 
-def get_embedding(phrase):
+def get_embedding(text):
     """
-    Generates an embedding for a given phrase using spaCy's pre-trained model.
-    
-    :param phrase: The phrase to embed.
-    :return: A numpy array representing the phrase embedding.
+    Generates a contextual embedding for the given text using GPT-2.
+
+    :param text: The text to embed.
+    :return: A tensor representing the contextual embedding of the input text.
     """
-    return nlp(phrase).vector
+    inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
+    outputs = model(**inputs)
+    # Use the last hidden state
+    embeddings = outputs.last_hidden_state
+    # Detach the tensor from the computation graph and convert it to a numpy array
+    embeddings_numpy = embeddings.mean(dim=1).detach().numpy()
+    return embeddings_numpy
 
 def calc_similarity(embedding1, embedding2):
     """
     Calculates cosine similarity between two embeddings.
     return: The cosine similarity score.
     """
-    # Reshape embeddings to 2D arrays
-    embedding1 = embedding1.reshape(1, -1)
-    embedding2 = embedding2.reshape(1, -1)
+    # Normalize the embeddings to unit vectors
+    norm1 = np.linalg.norm(embedding1)
+    norm2 = np.linalg.norm(embedding2)
+    embedding1_norm = embedding1 / norm1
+    embedding2_norm = embedding2 / norm2
     
-    return cosine_similarity(embedding1, embedding2)[0][0]
+    # Calculate the cosine similarity as the dot product of the normalized vectors
+    similarity = np.dot(embedding1_norm, embedding2_norm)
+    
+    return similarity
 
-def generate_suggestions(input_text, standard_phrases, similarity_threshold=0.75):
+def generate_suggestions(input_text, standard_phrases, similarity_threshold=0.85):
     
     suggestions = []
-    input_tokens = preprocess_text(input_text)
-    input_phrase_embeddings = {token: get_embedding(token) for token in set(input_tokens)}
+     # Generate embeddings for input and standard phrases
+    input_embedding = get_embedding(input_text)
+    # input_tokens = preprocess_text(input_text)
+    # input_phrase_embeddings = {token: get_embedding(token) for token in set(input_tokens)}
 
-    for input_phrase, input_embedding in input_phrase_embeddings.items():
-        for _, standard_phrase in standard_phrases.items():
-            standard_embedding = get_embedding(standard_phrase)
-            similarity = calc_similarity(input_embedding, standard_embedding)
-            if similarity >= similarity_threshold:
-                suggestions.append((input_phrase, standard_phrase, similarity))
+    for phrase in standard_phrases.values():
+        phrase_embedding = get_embedding(phrase)
+        similarity = calc_similarity(input_embedding, phrase_embedding)
+        if similarity > similarity_threshold:
+            suggestions.append((phrase, similarity))
                 
     # Sort suggestions by similarity score in descending order
     suggestions.sort(key=lambda x: x[2], reverse=True)
