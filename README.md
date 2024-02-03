@@ -28,8 +28,9 @@ Follow these steps to install and set up the Text Improvement Engine on your sys
 
 2. **Install Dependencies**: Execute the following command in the terminal to install the required Python libraries listed in `requirements.txt`:
 
+   platform: linux-64
    ```bash
-   pip install -r requirements.txt
+   conda create --name <env> --file <this file>
    ```
 
    This command ensures all necessary libraries, such as NLTK and spaCy, are installed in your Python environment, enabling the engine to process and analyze text effectively.
